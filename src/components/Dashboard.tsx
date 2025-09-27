@@ -7,16 +7,19 @@ import { BandActivityPanel } from './BandActivityPanel';
 import { APRSPanel } from './APRSPanel';
 import { SatellitePanel } from './SatellitePanel';
 import { WaterfallPanel } from './WaterfallPanel';
+import { AudioSettings } from './AudioSettings';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Play, Pause, Gear, Circle } from "@phosphor-icons/react";
+import { useAudioAlerts } from '../hooks/useAudioAlerts';
 
 const PANELS = [
   { id: 'spaceweather', name: 'Space Weather', component: SpaceWeatherPanel },
   { id: 'bands', name: 'Band Activity', component: BandActivityPanel },
   { id: 'aprs', name: 'APRS', component: APRSPanel },
   { id: 'satellites', name: 'Satellites', component: SatellitePanel },
-  { id: 'waterfall', name: 'Waterfall', component: WaterfallPanel }
+  { id: 'waterfall', name: 'Waterfall', component: WaterfallPanel },
+  { id: 'audio', name: 'Audio Settings', component: AudioSettings }
 ];
 
 const ROTATION_INTERVAL = 25000; // 25 seconds
@@ -25,6 +28,7 @@ const DATA_UPDATE_INTERVAL = 15000; // 15 seconds
 export function Dashboard() {
   const [currentPanel, setCurrentPanel] = useState(0);
   const [isRotating, setIsRotating] = useKV('dashboard-rotating', 'true');
+  const [showSettings, setShowSettings] = useState(false);
   const rotating = isRotating === 'true';
   const [data, setData] = useState<DashboardData>({
     spaceweather: null,
@@ -34,6 +38,7 @@ export function Dashboard() {
   });
   
   const simulator = new DataSimulator();
+  const { playTestAlert, playUrgentAlert } = useAudioAlerts(data.satellites?.passes || null);
 
   const updateData = useCallback(() => {
     setData({
@@ -80,6 +85,14 @@ export function Dashboard() {
           event.preventDefault();
           setIsRotating(prev => prev === 'true' ? 'false' : 'true');
           break;
+        case 'g':
+          // Toggle settings panel
+          if (PANELS[currentPanel].id === 'audio') {
+            setCurrentPanel(0); // Go back to first panel
+          } else {
+            setCurrentPanel(PANELS.findIndex(p => p.id === 'audio'));
+          }
+          break;
         case 'Escape':
           setIsRotating('false');
           break;
@@ -101,6 +114,8 @@ export function Dashboard() {
         return data.aprs;
       case 'satellites':
         return data.satellites;
+      case 'audio':
+        return { onTestAlert: playTestAlert, onTestUrgent: playUrgentAlert };
       default:
         return null;
     }
@@ -148,9 +163,17 @@ export function Dashboard() {
                 {rotating ? 'Pause' : 'Play'}
               </Button>
               
-              <Button variant="outline" size="sm" className="text-tv-sm">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const audioIndex = PANELS.findIndex(p => p.id === 'audio');
+                  setCurrentPanel(currentPanel === audioIndex ? 0 : audioIndex);
+                }}
+                className="text-tv-sm"
+              >
                 <Gear size={20} />
-                Settings
+                Audio
               </Button>
             </div>
           </div>
@@ -187,7 +210,7 @@ export function Dashboard() {
       <div className="fixed bottom-0 left-0 right-0 bg-background/90 backdrop-blur-sm border-t border-border p-4">
         <div className="flex items-center justify-between text-tv-sm text-muted-foreground">
           <div>
-            Use arrow keys to navigate • Space to pause/resume • ESC to stop rotation
+            Use arrow keys to navigate • Space to pause/resume • G for audio settings • ESC to stop rotation
           </div>
           <div>
             {new Date().toLocaleString()} UTC

@@ -1,8 +1,9 @@
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Planet, Timer, TrendUp } from "@phosphor-icons/react";
+import { Planet, Timer, TrendUp, SpeakerHigh, SpeakerX } from "@phosphor-icons/react";
 import type { SatelliteData } from "../lib/types";
 import { useState, useEffect } from "react";
+import { useAudioAlerts } from "../hooks/useAudioAlerts";
 
 interface SatellitePanelProps {
   data: SatelliteData | null;
@@ -44,6 +45,7 @@ function getElevationLabel(elevation: number): string {
 
 export function SatellitePanel({ data }: SatellitePanelProps) {
   const [currentTime, setCurrentTime] = useState(Date.now());
+  const { settings } = useAudioAlerts(data?.passes || null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -65,11 +67,45 @@ export function SatellitePanel({ data }: SatellitePanelProps) {
 
   return (
     <div className="h-full p-12 space-y-8">
-      <div className="flex items-center gap-6 mb-12">
-        <Planet size={64} className="text-accent" />
-        <div>
-          <h1 className="text-tv-xl font-bold">Satellite Passes</h1>
-          <p className="text-tv-lg text-muted-foreground">Next 24 Hours</p>
+      <div className="flex items-center justify-between mb-12">
+        <div className="flex items-center gap-6">
+          <Planet size={64} className="text-accent" />
+          <div>
+            <h1 className="text-tv-xl font-bold">Satellite Passes</h1>
+            <p className="text-tv-lg text-muted-foreground">Next 24 Hours</p>
+          </div>
+        </div>
+        
+        {/* Audio Alert Status */}
+        <div className="flex items-center gap-4">
+          {settings?.enabled ? (
+            <>
+              <SpeakerHigh size={48} className="text-accent" />
+              <div className="text-right">
+                <Badge className="bg-green-600 text-white text-tv-sm mb-1">
+                  ALERTS ON
+                </Badge>
+                <div className="text-tv-sm text-muted-foreground">
+                  {settings.highPriorityOnly 
+                    ? `${settings.minElevation}°+ passes` 
+                    : 'All passes'
+                  }
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <SpeakerX size={48} className="text-muted-foreground" />
+              <div className="text-right">
+                <Badge className="bg-red-600 text-white text-tv-sm mb-1">
+                  ALERTS OFF
+                </Badge>
+                <div className="text-tv-sm text-muted-foreground">
+                  Silent mode
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -79,22 +115,39 @@ export function SatellitePanel({ data }: SatellitePanelProps) {
           const aosDate = new Date(pass.aos);
           const losDate = new Date(pass.los);
           const duration = Math.round((losDate.getTime() - aosDate.getTime()) / (1000 * 60));
+          const isHighPriority = settings?.enabled && pass.max_el >= (settings?.minElevation || 30);
+          const timeUntilAos = aosDate.getTime() - currentTime;
+          const isImminent = timeUntilAos > 0 && timeUntilAos <= (settings?.prePassWarning || 5) * 60 * 1000;
           
           return (
             <Card 
               key={`${pass.name}-${pass.aos}`} 
-              className={`p-8 bg-card border-border ${isNext ? 'ring-2 ring-accent' : ''}`}
+              className={`p-8 bg-card border-border ${
+                isNext ? 'ring-2 ring-accent' : ''
+              } ${
+                isHighPriority && isImminent ? 'ring-2 ring-yellow-500 bg-yellow-500/5' : ''
+              }`}
             >
               <div className="grid grid-cols-5 gap-8 items-center">
                 <div className="flex items-center gap-4">
                   <Planet size={40} className={isNext ? 'text-accent' : 'text-muted-foreground'} />
                   <div>
-                    <div className="text-tv-lg font-bold text-foreground">
+                    <div className="text-tv-lg font-bold text-foreground flex items-center gap-2">
                       {pass.name}
+                      {isHighPriority && isImminent && (
+                        <Badge className="bg-yellow-600 text-white text-tv-xs animate-pulse">
+                          ALERT
+                        </Badge>
+                      )}
                     </div>
                     {isNext && (
                       <Badge className="bg-accent text-accent-foreground text-tv-xs mt-1">
                         NEXT PASS
+                      </Badge>
+                    )}
+                    {isHighPriority && !isNext && (
+                      <Badge className="bg-green-600 text-white text-tv-xs mt-1">
+                        HIGH PRIORITY
                       </Badge>
                     )}
                   </div>
@@ -139,13 +192,20 @@ export function SatellitePanel({ data }: SatellitePanelProps) {
                 <div className="text-center">
                   <div className="text-tv-sm text-muted-foreground mb-2">Countdown</div>
                   <div className={`text-tv-base font-mono font-bold ${
-                    formatCountdown(pass.aos) === 'ACTIVE' ? 'text-accent' : 'text-foreground'
+                    formatCountdown(pass.aos) === 'ACTIVE' ? 'text-accent' : 
+                    isHighPriority && isImminent ? 'text-yellow-400 animate-pulse' : 
+                    'text-foreground'
                   }`}>
                     {formatCountdown(pass.aos)}
                   </div>
                   {formatCountdown(pass.aos) === 'ACTIVE' && (
                     <Badge className="bg-green-600 text-white text-tv-xs mt-1">
                       LIVE NOW
+                    </Badge>
+                  )}
+                  {isHighPriority && isImminent && formatCountdown(pass.aos) !== 'ACTIVE' && (
+                    <Badge className="bg-yellow-600 text-white text-tv-xs mt-1 animate-pulse">
+                      ALERT ARMED
                     </Badge>
                   )}
                 </div>
